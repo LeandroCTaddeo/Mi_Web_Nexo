@@ -61,7 +61,6 @@ document.querySelector('#demo-form')?.addEventListener('submit', async (event) =
       Accept: 'application/json',
     },
     body: JSON.stringify(payload),
-    keepalive: true,
     signal: controller.signal,
   })
     .then(async (response) => {
