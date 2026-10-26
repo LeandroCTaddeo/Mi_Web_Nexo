@@ -59,16 +59,21 @@ document.querySelector('#demo-form')?.addEventListener('submit', async (event) =
       },
       body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
     });
-    const data = await response.json();
+
+    let data = {};
+    try { data = await response.json(); } catch {}
 
     if (!response.ok || data.success === false || data.success === 'false') {
-      throw new Error(data.message || 'El servicio no pudo recibir la solicitud.');
+      throw new Error(data.message || `Error HTTP ${response.status}`);
     }
 
     form.reset();
     result.textContent = 'Solicitud recibida. Si es el primer envío, confirmá la activación desde el correo de Nexo para empezar a recibir las consultas.';
   } catch (error) {
-    result.textContent = 'No se pudo enviar. Revisá tu conexión e intentá de nuevo en unos minutos.';
+    console.error('Error de FormSubmit:', error);
+    result.textContent = error instanceof TypeError
+      ? 'No se pudo conectar con el servicio. Intentá de nuevo en unos minutos.'
+      : `No se pudo enviar: ${error.message}`;
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = originalButtonText;
