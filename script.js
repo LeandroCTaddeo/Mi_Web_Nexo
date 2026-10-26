@@ -44,6 +44,7 @@ document.querySelector('#demo-form')?.addEventListener('submit', async (event) =
   const result = document.querySelector('#form-result');
   const submitButton = form.querySelector('[type="submit"]');
   const originalButtonText = submitButton.textContent;
+  const payload = Object.fromEntries(new FormData(form).entries());
 
   submitButton.disabled = true;
   submitButton.textContent = 'Enviando…';
@@ -51,39 +52,57 @@ document.querySelector('#demo-form')?.addEventListener('submit', async (event) =
   result.textContent = '';
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const abortId = setTimeout(() => controller.abort(), 30000);
+
+  const request = fetch(form.action, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
+    keepalive: true,
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      let data = {};
+      try { data = await response.json(); } catch {}
+      if (!response.ok || data.success === false || data.success === 'false') {
+        throw new Error(data.message || `Error HTTP ${response.status}`);
+      }
+      return 'ok';
+    })
+    .finally(() => clearTimeout(abortId));
+
+  const slow = new Promise((resolve) => setTimeout(() => resolve('slow'), 3000));
+
+  const restoreForm = (message) => {
+    Object.entries(payload).forEach(([name, value]) => {
+      const field = form.elements[name];
+      if (field && name !== '_honey' && field.type !== 'hidden') field.value = value;
+    });
+    result.textContent = message;
+  };
 
   try {
-    const response = await fetch(form.action, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
-      signal: controller.signal,
-    });
-
-    let data = {};
-    try { data = await response.json(); } catch {}
-
-    if (!response.ok || data.success === false || data.success === 'false') {
-      throw new Error(data.message || `Error HTTP ${response.status}`);
-    }
-
+    const first = await Promise.race([request, slow]);
     form.reset();
     result.textContent = '¡Solicitud recibida! Te vamos a contactar a la brevedad.';
+
+    if (first === 'slow') {
+      request.catch((error) => {
+        console.error('Error de FormSubmit (segundo plano):', error);
+        restoreForm('No pudimos confirmar el envío. Revisá tus datos y volvé a intentarlo.');
+      });
+    }
   } catch (error) {
     console.error('Error de FormSubmit:', error);
-    if (error.name === 'AbortError') {
-      result.textContent = 'La respuesta tardó más de lo normal. Es posible que tu solicitud haya llegado; si no recibís noticias, escribinos de nuevo.';
-    } else if (error instanceof TypeError) {
-      result.textContent = 'No se pudo conectar con el servicio. Intentá de nuevo en unos minutos.';
-    } else {
-      result.textContent = `No se pudo enviar: ${error.message}`;
-    }
+    restoreForm(
+      error instanceof TypeError
+        ? 'No se pudo conectar con el servicio. Intentá de nuevo en unos minutos.'
+        : `No se pudo enviar: ${error.message}`
+    );
   } finally {
-    clearTimeout(timeoutId);
     submitButton.disabled = false;
     submitButton.textContent = originalButtonText;
     form.removeAttribute('aria-busy');
