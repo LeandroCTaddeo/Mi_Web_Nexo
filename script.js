@@ -50,6 +50,9 @@ document.querySelector('#demo-form')?.addEventListener('submit', async (event) =
   form.setAttribute('aria-busy', 'true');
   result.textContent = '';
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
   try {
     const response = await fetch(form.action, {
       method: 'POST',
@@ -58,6 +61,7 @@ document.querySelector('#demo-form')?.addEventListener('submit', async (event) =
         Accept: 'application/json',
       },
       body: JSON.stringify(Object.fromEntries(new FormData(form).entries())),
+      signal: controller.signal,
     });
 
     let data = {};
@@ -68,13 +72,18 @@ document.querySelector('#demo-form')?.addEventListener('submit', async (event) =
     }
 
     form.reset();
-    result.textContent = 'Solicitud recibida. Si es el primer envío, confirmá la activación desde el correo de Nexo para empezar a recibir las consultas.';
+    result.textContent = '¡Solicitud recibida! Te vamos a contactar a la brevedad.';
   } catch (error) {
     console.error('Error de FormSubmit:', error);
-    result.textContent = error instanceof TypeError
-      ? 'No se pudo conectar con el servicio. Intentá de nuevo en unos minutos.'
-      : `No se pudo enviar: ${error.message}`;
+    if (error.name === 'AbortError') {
+      result.textContent = 'La respuesta tardó más de lo normal. Es posible que tu solicitud haya llegado; si no recibís noticias, escribinos de nuevo.';
+    } else if (error instanceof TypeError) {
+      result.textContent = 'No se pudo conectar con el servicio. Intentá de nuevo en unos minutos.';
+    } else {
+      result.textContent = `No se pudo enviar: ${error.message}`;
+    }
   } finally {
+    clearTimeout(timeoutId);
     submitButton.disabled = false;
     submitButton.textContent = originalButtonText;
     form.removeAttribute('aria-busy');
